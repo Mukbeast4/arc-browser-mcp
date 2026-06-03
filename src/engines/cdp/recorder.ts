@@ -13,6 +13,7 @@ import { log } from "../../lib/log.js";
 const CONSOLE_CAP = 500;
 const NETWORK_CAP = 500;
 const CONSOLE_TEXT_CAP = 2000;
+const DIALOG_AUTO_DISMISS_MS = 30000;
 
 export interface ConsoleEntry {
   id: number;
@@ -44,6 +45,7 @@ export interface PageBuffers {
   network: RingBuffer<NetworkEntry>;
   byRequest: WeakMap<Request, NetworkEntry>;
   pendingDialog: Dialog | null;
+  dialogTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export class CdpRecorder {
@@ -71,6 +73,7 @@ export class CdpRecorder {
       network: new RingBuffer<NetworkEntry>(NETWORK_CAP),
       byRequest: new WeakMap(),
       pendingDialog: null,
+      dialogTimer: null,
     };
     this.buffers.set(page, buf);
 
@@ -134,9 +137,19 @@ export class CdpRecorder {
       entry.failureText = req.failure()?.errorText ?? "failed";
     });
     page.on("dialog", (dialog: Dialog) => {
+      if (buf.dialogTimer) clearTimeout(buf.dialogTimer);
       buf.pendingDialog = dialog;
+      buf.dialogTimer = setTimeout(() => {
+        if (buf.pendingDialog === dialog) {
+          buf.pendingDialog = null;
+          buf.dialogTimer = null;
+          dialog.dismiss().catch(() => {});
+        }
+      }, DIALOG_AUTO_DISMISS_MS);
+      buf.dialogTimer.unref();
     });
     page.on("close", () => {
+      if (buf.dialogTimer) clearTimeout(buf.dialogTimer);
       this.buffers.delete(page);
       this.attached.delete(page);
     });
@@ -163,6 +176,10 @@ export class CdpRecorder {
     if (!buf) return null;
     const dialog = buf.pendingDialog;
     buf.pendingDialog = null;
+    if (buf.dialogTimer) {
+      clearTimeout(buf.dialogTimer);
+      buf.dialogTimer = null;
+    }
     return dialog;
   }
 

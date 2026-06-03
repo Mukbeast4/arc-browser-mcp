@@ -295,7 +295,7 @@ These tools act on the active tab of the active engine (live or CDP).
 
 ## DevTools
 
-> NOTE: These tools require the CDP engine. Run [`arc_cdp_start`](#arc_cdp_start) first; in live mode they return an error. Console and network capture keep the most recent 500 entries per page (older entries are evicted), and capture is disabled in `attach` mode unless `ARC_MCP_ALLOW_ATTACH_CAPTURE=1`. Every tool accepts an optional **pageId** (from `arc_list_tabs`) to target a specific page instead of the active one.
+> NOTE: These tools require the CDP engine. Run [`arc_cdp_start`](#arc_cdp_start) first; in live mode they return an error. Console/network capture and `arc_emulate` install state on the page and are disabled in `attach` mode unless `ARC_MCP_ALLOW_ATTACH_CAPTURE=1`, so they never instrument your real session unintentionally. Capture keeps the most recent 500 console and network entries per page (older entries are evicted). Tools accept an optional **pageId** (from `arc_list_tabs`) to target a specific page; page ids are assigned only when capture is enabled.
 
 ### `arc_list_console_messages`
 
@@ -452,12 +452,13 @@ These tools act on the active tab of the active engine (live or CDP).
 
 ### `arc_handle_dialog`
 
-**Description:** Accept or dismiss a pending JavaScript dialog (alert/confirm/prompt) on the active CDP page.
+**Description:** Accept or dismiss a pending JavaScript dialog (alert/confirm/prompt) captured on the page. Captured dialogs auto-dismiss after 30 seconds if not handled, so a page is never left blocked indefinitely.
 
 **Parameters:**
 
 - **action** (string: `accept` | `dismiss`) **(required)**: How to resolve the dialog.
 - **promptText** (string) _(optional)_: Text to enter for a prompt dialog when accepting.
+- **pageId** (number) _(optional)_: Target page id from `arc_list_tabs`; defaults to the active page.
 
 ---
 

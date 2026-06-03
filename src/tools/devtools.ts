@@ -17,7 +17,7 @@ function requireCapture(ctx: ServerContext): CdpEngine {
   const cdp = requireCdp(ctx);
   if (ctx.config.cdpMode === "attach" && !ctx.config.allowAttachCapture) {
     throw new Error(
-      "Console/network capture is disabled while attached to your real Arc session. Set ARC_MCP_ALLOW_ATTACH_CAPTURE=1 to enable it, or use the default dedicated mode.",
+      "CDP instrumentation of your real Arc session is disabled in attach mode. Set ARC_MCP_ALLOW_ATTACH_CAPTURE=1 to enable it, or use the default dedicated mode.",
     );
   }
   return cdp;
@@ -238,7 +238,7 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
     },
     async ({ width, height, userAgent, cpuThrottling, networkThrottling, latitude, longitude }) =>
       guard(ctx, async () => {
-        const cdp = requireCdp(ctx);
+        const cdp = requireCapture(ctx);
         const applied = await cdp.emulate({
           width,
           height,

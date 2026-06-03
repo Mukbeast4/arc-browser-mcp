@@ -97,11 +97,12 @@ export function registerInputTools(server: McpServer, ctx: ServerContext): void 
       inputSchema: {
         action: z.enum(["accept", "dismiss"]),
         promptText: z.string().optional().describe("Text to enter for a prompt dialog when accepting"),
+        pageId: z.number().int().nonnegative().optional().describe("Target page id from arc_list_tabs; defaults to active"),
       },
     },
-    async ({ action, promptText }) =>
+    async ({ action, promptText, pageId }) =>
       guard(ctx, async () => {
-        const type = await requireCdp(ctx).handleDialog(action, promptText);
+        const type = await requireCdp(ctx).handleDialog(action, promptText, pageId);
         return ok(`${action}ed ${type} dialog`);
       }),
   );

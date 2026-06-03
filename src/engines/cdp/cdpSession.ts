@@ -84,8 +84,8 @@ function traceMetrics(events: unknown[]): Record<string, number> {
   return metrics;
 }
 
-export async function emulate(page: Page, opts: EmulateOptions): Promise<string[]> {
-  const s = loose(await page.context().newCDPSession(page));
+export async function emulate(rawSession: CDPSession, opts: EmulateOptions): Promise<string[]> {
+  const s = loose(rawSession);
   const applied: string[] = [];
   if (opts.width !== undefined && opts.height !== undefined) {
     await s.send("Emulation.setDeviceMetricsOverride", {
@@ -139,6 +139,6 @@ export async function takeHeapSnapshot(page: Page): Promise<HeapSnapshotResult> 
   const data = chunks.join("");
   const path = join(tmpdir(), `arc-mcp-heap-${process.pid}-${Date.now()}.heapsnapshot`);
   await writeFile(path, data, "utf8");
-  const match = data.slice(0, 4096).match(/"node_count":(\d+)/);
+  const match = data.slice(0, 65536).match(/"node_count":(\d+)/);
   return { path, bytes: Buffer.byteLength(data), nodeCount: match ? parseInt(match[1], 10) : null };
 }

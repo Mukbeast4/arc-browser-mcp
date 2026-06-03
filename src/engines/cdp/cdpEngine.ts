@@ -1,4 +1,4 @@
-import type { Page } from "playwright-core";
+import type { Page, CDPSession } from "playwright-core";
 import type { Engine, PageSnapshot, ScreenshotResult, TabInfo } from "../engine.js";
 import type { Config } from "../../config.js";
 import { spawnDedicatedArc, waitForCdp, type DedicatedArc } from "./launcher.js";
@@ -32,6 +32,7 @@ export class CdpEngine implements Engine {
   private dedicated: DedicatedArc | null = null;
   private conn = new CdpConnection();
   private trace: TraceSession | null = null;
+  private emulationSessions = new WeakMap<Page, CDPSession>();
 
   constructor(private config: Config) {}
 
@@ -112,7 +113,13 @@ export class CdpEngine implements Engine {
   }
 
   async emulate(opts: EmulateOptions): Promise<string[]> {
-    return applyEmulation(await this.cdpPage(), opts);
+    const page = await this.cdpPage();
+    let session = this.emulationSessions.get(page);
+    if (!session) {
+      session = await page.context().newCDPSession(page);
+      this.emulationSessions.set(page, session);
+    }
+    return applyEmulation(session, opts);
   }
 
   async resizePage(width: number, height: number): Promise<boolean> {
@@ -156,8 +163,8 @@ export class CdpEngine implements Engine {
     return captureHeapSnapshot(await this.cdpPage());
   }
 
-  async handleDialog(action: "accept" | "dismiss", promptText?: string): Promise<string> {
-    const page = await this.cdpPage();
+  async handleDialog(action: "accept" | "dismiss", promptText?: string, pageId?: number): Promise<string> {
+    const page = await this.cdpPage(pageId);
     const dialog = this.conn.recorder.takeDialog(page);
     if (!dialog) throw new Error("no pending dialog on the active page");
     const type = dialog.type();
