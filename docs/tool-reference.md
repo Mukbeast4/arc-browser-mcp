@@ -30,6 +30,24 @@
 - **Meta** (2 tools)
   - [`arc_status`](#arc_status)
   - [`arc_check_capabilities`](#arc_check_capabilities)
+- **DevTools** (8 tools, CDP only)
+  - [`arc_list_console_messages`](#arc_list_console_messages)
+  - [`arc_get_console_message`](#arc_get_console_message)
+  - [`arc_list_network_requests`](#arc_list_network_requests)
+  - [`arc_get_network_request`](#arc_get_network_request)
+  - [`arc_performance_start_trace`](#arc_performance_start_trace)
+  - [`arc_performance_stop_trace`](#arc_performance_stop_trace)
+  - [`arc_emulate`](#arc_emulate)
+  - [`arc_resize_page`](#arc_resize_page)
+- **Advanced input** (6 tools, CDP only)
+  - [`arc_hover`](#arc_hover)
+  - [`arc_drag`](#arc_drag)
+  - [`arc_press_key`](#arc_press_key)
+  - [`arc_fill_form`](#arc_fill_form)
+  - [`arc_upload_file`](#arc_upload_file)
+  - [`arc_handle_dialog`](#arc_handle_dialog)
+- **Memory** (1 tool, CDP only)
+  - [`arc_take_heap_snapshot`](#arc_take_heap_snapshot)
 
 ## Page automation
 
@@ -270,5 +288,185 @@ These tools act on the active tab of the active engine (live or CDP).
 ### `arc_check_capabilities`
 
 **Description:** Probe what the live engine can do on the running Arc: basic AppleScript control and in-page JavaScript execution.
+
+**Parameters:** None.
+
+---
+
+## DevTools
+
+> NOTE: These tools require the CDP engine. Run [`arc_cdp_start`](#arc_cdp_start) first; in live mode they return an error. Console and network capture keep the most recent 500 entries per page (older entries are evicted), and capture is disabled in `attach` mode unless `ARC_MCP_ALLOW_ATTACH_CAPTURE=1`. Every tool accepts an optional **pageId** (from `arc_list_tabs`) to target a specific page instead of the active one.
+
+### `arc_list_console_messages`
+
+**Description:** List console messages captured from the active CDP page. Higher ids are newer; results are paginated with a `showing X-Y of N (page P)` footer.
+
+**Parameters:**
+
+- **level** (string: `log` | `info` | `warn` | `error` | `debug`) _(optional)_: Filter by console level.
+- **limit** (number) _(optional)_: Max entries to return. Default `50`.
+- **offset** (number) _(optional)_: Pagination offset. Default `0`.
+- **pageId** (number) _(optional)_: Target page id from `arc_list_tabs`; defaults to the active page.
+
+---
+
+### `arc_get_console_message`
+
+**Description:** Return the full text and source of a captured console message by id.
+
+**Parameters:**
+
+- **id** (number) **(required)**: Message id from `arc_list_console_messages`.
+- **pageId** (number) _(optional)_: Target page id; defaults to the active page.
+
+---
+
+### `arc_list_network_requests`
+
+**Description:** List network requests captured from the active CDP page, with method, status, resource type, URL, and duration.
+
+**Parameters:**
+
+- **resourceType** (string) _(optional)_: Filter by type, e.g. `document`, `script`, `xhr`, `fetch`, `image`.
+- **status** (number) _(optional)_: Filter by HTTP status code.
+- **limit** (number) _(optional)_: Max entries to return. Default `50`.
+- **offset** (number) _(optional)_: Pagination offset. Default `0`.
+- **pageId** (number) _(optional)_: Target page id; defaults to the active page.
+
+---
+
+### `arc_get_network_request`
+
+**Description:** Return details of a captured network request by id, optionally including the response body. Bodies are fetched lazily and truncated to 64 KB; binary bodies are reported by size only; a stale request (page navigated/closed) returns a clear message.
+
+**Parameters:**
+
+- **id** (number) **(required)**: Request id from `arc_list_network_requests`.
+- **includeBody** (boolean) _(optional)_: Fetch and include the response body.
+- **pageId** (number) _(optional)_: Target page id; defaults to the active page.
+
+---
+
+### `arc_performance_start_trace`
+
+**Description:** Start a Chrome performance trace on the active CDP page. Finish with `arc_performance_stop_trace`.
+
+**Parameters:**
+
+- **reload** (boolean) _(optional)_: Reload the page after starting, to capture the full load.
+- **categories** (string) _(optional)_: Comma-separated trace categories.
+
+---
+
+### `arc_performance_stop_trace`
+
+**Description:** Stop the running performance trace and return a compact summary: event count, wall-clock duration, and trace span (not full Core Web Vitals or the raw trace).
+
+**Parameters:** None.
+
+---
+
+### `arc_emulate`
+
+**Description:** Apply device/network emulation to the active CDP page: viewport, userAgent, CPU and network throttling, and geolocation. Each provided option is applied; the result echoes what was set.
+
+**Parameters:**
+
+- **width** (number) _(optional)_: Viewport width (set with `height` via device metrics).
+- **height** (number) _(optional)_: Viewport height (set with `width`).
+- **userAgent** (string) _(optional)_: Override the user agent.
+- **cpuThrottling** (number) _(optional)_: CPU slowdown multiplier, e.g. `4`.
+- **networkThrottling** (string: `offline` | `slow-3g` | `fast-3g` | `none`) _(optional)_: Network conditions.
+- **latitude** (number) _(optional)_: Geolocation latitude (set with `longitude`).
+- **longitude** (number) _(optional)_: Geolocation longitude (set with `latitude`).
+
+---
+
+### `arc_resize_page`
+
+**Description:** Resize the active CDP page viewport. Best-effort over `connectOverCDP`; use `arc_emulate` for reliable device metrics.
+
+**Parameters:**
+
+- **width** (number) **(required)**: Viewport width.
+- **height** (number) **(required)**: Viewport height.
+
+---
+
+## Advanced input
+
+> NOTE: These tools require the CDP engine. Run [`arc_cdp_start`](#arc_cdp_start) first; in live mode they return an error. Element refs come from [`arc_snapshot`](#arc_snapshot).
+
+### `arc_hover`
+
+**Description:** Hover the pointer over an element by its ref.
+
+**Parameters:**
+
+- **ref** (string) **(required)**: Element ref from `arc_snapshot`.
+
+---
+
+### `arc_drag`
+
+**Description:** Drag one element onto another by their refs.
+
+**Parameters:**
+
+- **fromRef** (string) **(required)**: Source element ref.
+- **toRef** (string) **(required)**: Target element ref.
+
+---
+
+### `arc_press_key`
+
+**Description:** Press a key or chord (e.g. `Enter`, `Escape`, `Control+A`), optionally focusing an element ref first.
+
+**Parameters:**
+
+- **key** (string) **(required)**: Key or chord, e.g. `Enter`, `Tab`, `Control+A`.
+- **ref** (string) _(optional)_: Element ref to focus before pressing.
+
+---
+
+### `arc_fill_form`
+
+**Description:** Fill multiple fields in one call, each by its ref.
+
+**Parameters:**
+
+- **fields** (array of `{ ref, value }`) **(required)**: Fields to fill.
+
+---
+
+### `arc_upload_file`
+
+**Description:** Set files on a file input by its ref, from local file paths (the only tool that reads from the local filesystem).
+
+**Parameters:**
+
+- **ref** (string) **(required)**: File input element ref.
+- **paths** (array of string) **(required)**: Absolute local file paths to upload.
+
+---
+
+### `arc_handle_dialog`
+
+**Description:** Accept or dismiss a pending JavaScript dialog (alert/confirm/prompt) on the active CDP page.
+
+**Parameters:**
+
+- **action** (string: `accept` | `dismiss`) **(required)**: How to resolve the dialog.
+- **promptText** (string) _(optional)_: Text to enter for a prompt dialog when accepting.
+
+---
+
+## Memory
+
+> NOTE: This tool requires the CDP engine. Run [`arc_cdp_start`](#arc_cdp_start) first.
+
+### `arc_take_heap_snapshot`
+
+**Description:** Capture a V8 heap snapshot of the active CDP page, write it to a temporary `.heapsnapshot` file, and return the path plus a summary (size and node count). Open the file in Chrome DevTools > Memory for retainer analysis.
 
 **Parameters:** None.

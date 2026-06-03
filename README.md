@@ -15,6 +15,7 @@
 - **High-fidelity testing**: the CDP engine runs a clean, dedicated Arc instance with native screenshots and Playwright auto-waiting.
 - **Accessibility-first interaction**: `arc_snapshot` returns a compact tree of interactive elements with stable refs; click, type, and fill by ref instead of brittle selectors.
 - **Arc-native automation**: list and focus Spaces, manage tabs and windows, open Little Arc — things a generic Chrome MCP can't do.
+- **Chrome DevTools surface (CDP)**: capture console messages and network requests, run performance traces, emulate devices and throttling, drive advanced input (hover, drag, keys, file upload, dialogs), and take heap snapshots.
 
 ## Disclaimers
 
@@ -119,6 +120,27 @@ See the full [tool reference](./docs/tool-reference.md).
   - [`arc_status`](docs/tool-reference.md#arc_status)
   - [`arc_check_capabilities`](docs/tool-reference.md#arc_check_capabilities)
 
+The following groups require the CDP engine (run [`arc_cdp_start`](docs/tool-reference.md#arc_cdp_start) first); in live mode they return a clear error.
+
+- **DevTools** (8 tools)
+  - [`arc_list_console_messages`](docs/tool-reference.md#arc_list_console_messages)
+  - [`arc_get_console_message`](docs/tool-reference.md#arc_get_console_message)
+  - [`arc_list_network_requests`](docs/tool-reference.md#arc_list_network_requests)
+  - [`arc_get_network_request`](docs/tool-reference.md#arc_get_network_request)
+  - [`arc_performance_start_trace`](docs/tool-reference.md#arc_performance_start_trace)
+  - [`arc_performance_stop_trace`](docs/tool-reference.md#arc_performance_stop_trace)
+  - [`arc_emulate`](docs/tool-reference.md#arc_emulate)
+  - [`arc_resize_page`](docs/tool-reference.md#arc_resize_page)
+- **Advanced input** (6 tools)
+  - [`arc_hover`](docs/tool-reference.md#arc_hover)
+  - [`arc_drag`](docs/tool-reference.md#arc_drag)
+  - [`arc_press_key`](docs/tool-reference.md#arc_press_key)
+  - [`arc_fill_form`](docs/tool-reference.md#arc_fill_form)
+  - [`arc_upload_file`](docs/tool-reference.md#arc_upload_file)
+  - [`arc_handle_dialog`](docs/tool-reference.md#arc_handle_dialog)
+- **Memory** (1 tool)
+  - [`arc_take_heap_snapshot`](docs/tool-reference.md#arc_take_heap_snapshot)
+
 ## Configuration
 
 Set these via the `env` block in your MCP configuration.
@@ -148,6 +170,21 @@ Set these via the `env` block in your MCP configuration.
   - **Type:** string (`dedicated` | `attach`)
   - **Default:** `dedicated`
 
+- **`ARC_MCP_CDP_TIMEOUT_MS`**
+  Timeout for launching and connecting to the CDP instance.
+  - **Type:** number (milliseconds)
+  - **Default:** `30000`
+
+- **`ARC_MCP_ALLOW_ATTACH_CAPTURE`**
+  In `attach` mode, set to `1` to allow console/network capture on your real Arc session. Off by default so attaching never instruments your live browsing.
+  - **Type:** string (`1` to enable)
+  - **Default:** unset (disabled)
+
+- **`ARC_MCP_LOG_LEVEL`**
+  Server log verbosity. Logs are written to stderr only.
+  - **Type:** string (`debug` | `info` | `warn` | `error`)
+  - **Default:** `info`
+
 ## Concepts
 
 ### Two engines, and why
@@ -176,8 +213,10 @@ The CDP engine requires none of these.
 
 - Pin/unpin is not available: Arc 1.149's AppleScript `location` setter is broken (reads work, writes fail). Pinning would need a keystroke via Accessibility.
 - Live `arc_evaluate` expects a single-line expression; use the CDP engine for multi-line scripts.
-- Network/console capture and hover/select-option tools are not yet exposed (planned for the CDP engine).
-- Tab indices are per-engine (live = front-window tabs; CDP = all CDP pages); re-run `arc_list_tabs` after switching engines.
+- The DevTools, advanced-input, and memory tools require the CDP engine — run `arc_cdp_start` first; in live mode they return a clear error.
+- Console and network capture keep a rolling buffer of the most recent 500 entries per page; older entries are evicted. In `attach` mode capture is off unless `ARC_MCP_ALLOW_ATTACH_CAPTURE=1`.
+- `arc_performance_stop_trace` returns a compact summary (event count, duration, trace span), not full Core Web Vitals or the raw trace; `arc_resize_page` is best-effort over `connectOverCDP` — use `arc_emulate` for reliable device metrics.
+- Tab indices are per-engine (live = front-window tabs; CDP = all CDP pages); re-run `arc_list_tabs` after switching engines. In CDP mode `arc_list_tabs` also shows a stable `[page N]` id that the DevTools tools accept as `pageId`.
 - The CDP engine requires your normal Arc to be closed; `arc_cdp_start` handles the quit and restore.
 
 ## Development
@@ -185,10 +224,15 @@ The CDP engine requires none of these.
 ```bash
 bun run build       # compile TypeScript to dist/
 bun run typecheck   # type-check only
+bun test tests      # unit tests (pure logic, no Arc needed)
+bun run check       # typecheck + unit tests
+bun run test:e2e    # opt-in live smoke; needs a running Arc (sets ARC_MCP_E2E=1)
 node dist/index.js  # run the server over stdio
 ```
 
-The source is modular: `src/engines/live` (AppleScript engine), `src/engines/cdp` (Playwright engine), `src/tools` (MCP tool registration), `src/lib` (logging, serial queue).
+The source is modular: `src/engines/live` (AppleScript engine), `src/engines/cdp` (Playwright engine plus the console/network recorder and CDPSession helpers), `src/tools` (MCP tool registration), `src/lib` (logging, serial queue, retry). Logs go to stderr only — stdout is the MCP transport; set `ARC_MCP_LOG_LEVEL=debug` to trace AppleScript and CDP activity.
+
+Dependencies are pinned. To upgrade one (`@modelcontextprotocol/sdk`, `playwright-core`, `zod`): bump it alone, run `bun run check`, then smoke the server manually — `arc_status`, a live `arc_navigate`/`arc_snapshot`, then `arc_cdp_start` + a CDP tool + `arc_cdp_stop`. `playwright-core` is the most sensitive (its `connectOverCDP` is what hangs under Bun), so verify the CDP path under Node before committing.
 
 ## License
 
