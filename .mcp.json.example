@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "arc-mcp": {
+      "command": "node",
+      "args": ["/Users/mukbeast4/git/arc-mcp/dist/index.js"],
+      "env": {
+        "ARC_MCP_DEFAULT_ENGINE": "live"
+      }
+    }
+  }
+}
