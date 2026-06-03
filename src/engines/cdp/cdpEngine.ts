@@ -7,6 +7,14 @@ import { SNAPSHOT_JS, GET_TEXT_JS, evalExprJs, waitTextJs } from "../live/liveJs
 import { assertRef } from "../ref.js";
 import { log } from "../../lib/log.js";
 import type { CdpRecorder } from "./recorder.js";
+import {
+  startTrace as beginTrace,
+  stopTrace as endTrace,
+  emulate as applyEmulation,
+  type TraceSession,
+  type TraceSummary,
+  type EmulateOptions,
+} from "./cdpSession.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -21,6 +29,7 @@ export class CdpEngine implements Engine {
   readonly name = "cdp" as const;
   private dedicated: DedicatedArc | null = null;
   private conn = new CdpConnection();
+  private trace: TraceSession | null = null;
 
   constructor(private config: Config) {}
 
@@ -47,6 +56,7 @@ export class CdpEngine implements Engine {
   }
 
   async dispose(): Promise<void> {
+    this.trace = null;
     await this.conn.disconnect();
     if (this.dedicated) {
       const { proc } = this.dedicated;
@@ -85,6 +95,32 @@ export class CdpEngine implements Engine {
 
   captureEnabled(): boolean {
     return this.conn.captureEnabled;
+  }
+
+  async startTrace(categories?: string): Promise<void> {
+    if (this.trace) throw new Error("a performance trace is already running; stop it first");
+    this.trace = await beginTrace(await this.cdpPage(), categories);
+  }
+
+  async stopTrace(): Promise<TraceSummary> {
+    if (!this.trace) throw new Error("no performance trace is running; start one first");
+    const summary = await endTrace(this.trace);
+    this.trace = null;
+    return summary;
+  }
+
+  async emulate(opts: EmulateOptions): Promise<string[]> {
+    return applyEmulation(await this.cdpPage(), opts);
+  }
+
+  async resizePage(width: number, height: number): Promise<boolean> {
+    const page = await this.cdpPage();
+    let okFlag = true;
+    await page.setViewportSize({ width, height }).catch((e) => {
+      log.debug("resize failed", String(e));
+      okFlag = false;
+    });
+    return okFlag;
   }
 
   private locator(page: Page, ref: string) {

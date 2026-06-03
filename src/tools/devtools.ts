@@ -174,4 +174,87 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         return ok(lines.join("\n"));
       }),
   );
+
+  server.registerTool(
+    "arc_performance_start_trace",
+    {
+      description:
+        "Start a Chrome performance trace on the active CDP page (requires arc_cdp_start). Finish with arc_performance_stop_trace.",
+      inputSchema: {
+        reload: z.boolean().optional().describe("Reload the page after starting, to capture the full load"),
+        categories: z.string().optional().describe("Comma-separated trace categories"),
+      },
+    },
+    async ({ reload, categories }) =>
+      guard(ctx, async () => {
+        const cdp = requireCdp(ctx);
+        await cdp.startTrace(categories);
+        if (reload) await cdp.reload();
+        return ok("performance trace started; run arc_performance_stop_trace to finish");
+      }),
+  );
+
+  server.registerTool(
+    "arc_performance_stop_trace",
+    { description: "Stop the running performance trace and return a summary (requires arc_cdp_start)." },
+    async () =>
+      guard(ctx, async () => {
+        const cdp = requireCdp(ctx);
+        const summary = await cdp.stopTrace();
+        const lines = [`events: ${summary.events}`, `durationMs: ${summary.durationMs}`];
+        for (const [k, v] of Object.entries(summary.metrics)) lines.push(`${k}: ${v}`);
+        return ok(lines.join("\n"));
+      }),
+  );
+
+  server.registerTool(
+    "arc_emulate",
+    {
+      description:
+        "Apply device/network emulation to the active CDP page: viewport, userAgent, CPU/network throttling, geolocation (requires arc_cdp_start).",
+      inputSchema: {
+        width: z.number().int().positive().optional(),
+        height: z.number().int().positive().optional(),
+        userAgent: z.string().optional(),
+        cpuThrottling: z.number().positive().optional().describe("CPU slowdown multiplier, e.g. 4"),
+        networkThrottling: z.enum(["offline", "slow-3g", "fast-3g", "none"]).optional(),
+        latitude: z.number().optional(),
+        longitude: z.number().optional(),
+      },
+    },
+    async ({ width, height, userAgent, cpuThrottling, networkThrottling, latitude, longitude }) =>
+      guard(ctx, async () => {
+        const cdp = requireCdp(ctx);
+        const applied = await cdp.emulate({
+          width,
+          height,
+          userAgent,
+          cpuThrottling,
+          networkThrottling,
+          latitude,
+          longitude,
+        });
+        return ok(applied.length ? `applied: ${applied.join(", ")}` : "no emulation options provided");
+      }),
+  );
+
+  server.registerTool(
+    "arc_resize_page",
+    {
+      description:
+        "Resize the active CDP page viewport, best-effort over connectOverCDP (use arc_emulate for reliable device metrics). Requires arc_cdp_start.",
+      inputSchema: {
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+      },
+    },
+    async ({ width, height }) =>
+      guard(ctx, async () => {
+        const cdp = requireCdp(ctx);
+        const okFlag = await cdp.resizePage(width, height);
+        return ok(
+          `resized (best-effort) to ${width}x${height}${okFlag ? "" : " (viewport override may not have applied)"}; use arc_emulate for reliable device metrics`,
+        );
+      }),
+  );
 }
