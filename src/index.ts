@@ -35,7 +35,9 @@ async function main(): Promise<void> {
     const restore = ctx.active === "cdp" && ctx.config.cdpMode === "dedicated";
     try {
       await ctx.cdp.dispose();
-    } catch {}
+    } catch (e) {
+      log.debug("dispose failed", e instanceof Error ? e.message : String(e));
+    }
     if (restore) await relaunchUserArc();
     process.exit(0);
   };

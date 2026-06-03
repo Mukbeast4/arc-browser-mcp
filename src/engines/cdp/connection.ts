@@ -1,12 +1,14 @@
 import { chromium, type Browser, type Page } from "playwright-core";
+import { log } from "../../lib/log.js";
 
 export class CdpConnection {
   private browser: Browser | null = null;
   private active: Page | null = null;
 
-  async connect(port: number): Promise<void> {
-    this.browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 20000 });
+  async connect(port: number, timeoutMs = 20000): Promise<void> {
+    this.browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: timeoutMs });
     this.browser.on("disconnected", () => {
+      log.debug("cdp disconnected");
       this.browser = null;
       this.active = null;
     });
@@ -62,7 +64,9 @@ export class CdpConnection {
     if (this.browser) {
       try {
         await this.browser.close();
-      } catch {}
+      } catch (e) {
+        log.debug("browser close failed", String(e));
+      }
       this.browser = null;
       this.active = null;
     }

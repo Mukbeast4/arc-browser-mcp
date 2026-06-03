@@ -13,6 +13,8 @@ import {
 } from "./liveJs.js";
 import { parsePageResult } from "./pageResult.js";
 import { assertRef } from "../ref.js";
+import { retry } from "../../lib/retry.js";
+import { log } from "../../lib/log.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const RS = "\x1e";
@@ -32,12 +34,14 @@ export class LiveEngine implements Engine {
     const program = `(function(){try{return JSON.stringify({ok:true,value:(${inner})})}catch(e){return JSON.stringify({ok:false,error:String((e&&e.message)||e)})}})()`;
     const escaped = escapeForAppleScript(program);
     const script = `tell application "Arc"\ntell front window's active tab\nexecute javascript "${escaped}"\nend tell\nend tell`;
-    let res = await runAppleScript(script, 30000);
-    for (let attempt = 0; !res.ok && attempt < 2; attempt++) {
-      await delay(500);
-      res = await runAppleScript(script, 30000);
-    }
-    if (!res.ok) throw new Error(mapError(res.error));
+    const res = await retry(
+      async () => {
+        const r = await runAppleScript(script, 30000);
+        if (!r.ok) throw new Error(mapError(r.error));
+        return r;
+      },
+      { attempts: 3, baseMs: 400 },
+    );
     return parsePageResult<T>(res.output);
   }
 
@@ -140,7 +144,9 @@ end tell`;
     if (out.startsWith('"') && out.endsWith('"')) {
       try {
         out = JSON.parse(out) as string;
-      } catch {}
+      } catch (e) {
+        log.debug("listTabs unwrap failed", String(e));
+      }
     }
     const gsIndex = out.indexOf("\x1d");
     const activeId = gsIndex >= 0 ? out.slice(0, gsIndex) : "";

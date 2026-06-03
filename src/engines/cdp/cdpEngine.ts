@@ -5,6 +5,7 @@ import { spawnDedicatedArc, waitForCdp, type DedicatedArc } from "./launcher.js"
 import { CdpConnection } from "./connection.js";
 import { SNAPSHOT_JS, GET_TEXT_JS, evalExprJs, waitTextJs } from "../live/liveJs.js";
 import { assertRef } from "../ref.js";
+import { log } from "../../lib/log.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -25,18 +26,21 @@ export class CdpEngine implements Engine {
   async ensureReady(): Promise<void> {
     if (this.conn.connected) return;
     const port = this.config.cdpPort || 9222;
+    const timeout = this.config.cdpTimeoutMs;
     if (this.config.cdpMode === "attach") {
-      await this.conn.connect(port);
+      await this.conn.connect(port, timeout);
       return;
     }
-    const proc = spawnDedicatedArc(this.config.arcBin, this.config.cdpProfileDir, port);
-    this.dedicated = { proc, port };
+    this.dedicated = spawnDedicatedArc(this.config.arcBin, this.config.cdpProfileDir, port);
     try {
-      await waitForCdp(port);
-      await this.conn.connect(port);
+      await waitForCdp(port, timeout);
+      await this.conn.connect(port, timeout);
     } catch (err) {
+      const logs = this.dedicated?.recentLogs() ?? [];
       await this.dispose();
-      throw err;
+      const base = err instanceof Error ? err.message : String(err);
+      const detail = logs.length > 0 ? `\nlast dedicated Arc output:\n${logs.join("\n")}` : "";
+      throw new Error(base + detail);
     }
   }
 
@@ -47,11 +51,15 @@ export class CdpEngine implements Engine {
       this.dedicated = null;
       try {
         proc.kill("SIGTERM");
-      } catch {}
+      } catch (e) {
+        log.debug("SIGTERM failed", String(e));
+      }
       await delay(1500);
       try {
         proc.kill("SIGKILL");
-      } catch {}
+      } catch (e) {
+        log.debug("SIGKILL failed", String(e));
+      }
     }
   }
 

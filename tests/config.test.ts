@@ -7,6 +7,8 @@ const KEYS = [
   "ARC_MCP_PROFILE_DIR",
   "ARC_MCP_CDP_PORT",
   "ARC_MCP_CDP_MODE",
+  "ARC_MCP_CDP_TIMEOUT_MS",
+  "ARC_MCP_ALLOW_ATTACH_CAPTURE",
 ];
 
 let saved: Record<string, string | undefined> = {};
@@ -33,6 +35,8 @@ describe("loadConfig defaults", () => {
     expect(c.cdpMode).toBe("dedicated");
     expect(c.cdpPort).toBe(0);
     expect(c.arcBin).toContain("Arc.app");
+    expect(c.cdpTimeoutMs).toBe(30000);
+    expect(c.allowAttachCapture).toBe(false);
   });
 });
 
@@ -51,6 +55,17 @@ describe("loadConfig overrides", () => {
   test("non-numeric port falls back to 0", () => {
     process.env.ARC_MCP_CDP_PORT = "abc";
     expect(loadConfig().cdpPort).toBe(0);
+  });
+  test("reads cdp timeout and attach-capture opt-in", () => {
+    process.env.ARC_MCP_CDP_TIMEOUT_MS = "5000";
+    process.env.ARC_MCP_ALLOW_ATTACH_CAPTURE = "1";
+    const c = loadConfig();
+    expect(c.cdpTimeoutMs).toBe(5000);
+    expect(c.allowAttachCapture).toBe(true);
+  });
+  test("non-numeric cdp timeout falls back to 30000", () => {
+    process.env.ARC_MCP_CDP_TIMEOUT_MS = "nope";
+    expect(loadConfig().cdpTimeoutMs).toBe(30000);
   });
   test("unknown engine value falls back to live", () => {
     process.env.ARC_MCP_DEFAULT_ENGINE = "weird";
