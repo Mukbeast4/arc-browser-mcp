@@ -11,16 +11,14 @@ import {
   evalExprJs,
   waitTextJs,
 } from "./liveJs.js";
+import { parsePageResult } from "./pageResult.js";
+import { assertRef } from "../ref.js";
+import { retry } from "../../lib/retry.js";
+import { log } from "../../lib/log.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const RS = "\x1e";
 const US = "\x1f";
-
-interface PageResult<T> {
-  ok: boolean;
-  value?: T;
-  error?: string;
-}
 
 export class LiveEngine implements Engine {
   readonly name = "live" as const;
@@ -36,23 +34,15 @@ export class LiveEngine implements Engine {
     const program = `(function(){try{return JSON.stringify({ok:true,value:(${inner})})}catch(e){return JSON.stringify({ok:false,error:String((e&&e.message)||e)})}})()`;
     const escaped = escapeForAppleScript(program);
     const script = `tell application "Arc"\ntell front window's active tab\nexecute javascript "${escaped}"\nend tell\nend tell`;
-    let res = await runAppleScript(script, 30000);
-    for (let attempt = 0; !res.ok && attempt < 2; attempt++) {
-      await delay(500);
-      res = await runAppleScript(script, 30000);
-    }
-    if (!res.ok) throw new Error(mapError(res.error));
-    if (!res.output) throw new Error("empty result from page (is JavaScript from Apple Events enabled in Arc?)");
-    let parsed: PageResult<T>;
-    try {
-      let raw: unknown = JSON.parse(res.output.trim());
-      if (typeof raw === "string") raw = JSON.parse(raw);
-      parsed = raw as PageResult<T>;
-    } catch {
-      throw new Error(`could not parse page result: ${res.output.slice(0, 200)}`);
-    }
-    if (!parsed || parsed.ok !== true) throw new Error(parsed?.error ?? "page evaluation failed");
-    return parsed.value as T;
+    const res = await retry(
+      async () => {
+        const r = await runAppleScript(script, 30000);
+        if (!r.ok) throw new Error(mapError(r.error));
+        return r;
+      },
+      { attempts: 3, baseMs: 400 },
+    );
+    return parsePageResult<T>(res.output);
   }
 
   private async waitLoaded(timeoutMs: number): Promise<void> {
@@ -98,22 +88,18 @@ export class LiveEngine implements Engine {
     return { url: v.url, title: v.title, tree: v.tree, refCount: v.count };
   }
 
-  private assertRef(ref: string): void {
-    if (!/^\d+$/.test(ref)) throw new Error(`invalid ref "${ref}"; use a ref from arc_snapshot`);
-  }
-
   async click(ref: string): Promise<void> {
-    this.assertRef(ref);
+    assertRef(ref);
     await this.runPage(clickJs(ref));
   }
 
   async type(ref: string, text: string, submit: boolean): Promise<void> {
-    this.assertRef(ref);
+    assertRef(ref);
     await this.runPage(typeJs(ref, text, submit));
   }
 
   async fill(ref: string, value: string): Promise<void> {
-    this.assertRef(ref);
+    assertRef(ref);
     await this.runPage(fillJs(ref, value));
   }
 
@@ -158,7 +144,9 @@ end tell`;
     if (out.startsWith('"') && out.endsWith('"')) {
       try {
         out = JSON.parse(out) as string;
-      } catch {}
+      } catch (e) {
+        log.debug("listTabs unwrap failed", String(e));
+      }
     }
     const gsIndex = out.indexOf("\x1d");
     const activeId = gsIndex >= 0 ? out.slice(0, gsIndex) : "";

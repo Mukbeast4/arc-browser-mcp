@@ -13,7 +13,10 @@ export function registerTabTools(server: McpServer, ctx: ServerContext): void {
     async () =>
       guard(ctx, async () => {
         const tabs = await engine().listTabs();
-        const lines = tabs.map((t) => `${t.index}${t.active ? "*" : " "} ${t.title} - ${t.url}`);
+        const lines = tabs.map(
+          (t) =>
+            `${t.index}${t.active ? "*" : " "}${t.pageId !== undefined ? ` [page ${t.pageId}]` : ""} ${t.title} - ${t.url}`,
+        );
         return ok(lines.length ? lines.join("\n") : "(no tabs)");
       }),
   );

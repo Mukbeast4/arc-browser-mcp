@@ -1,9 +1,22 @@
-import type { Page } from "playwright-core";
+import type { Page, CDPSession } from "playwright-core";
 import type { Engine, PageSnapshot, ScreenshotResult, TabInfo } from "../engine.js";
 import type { Config } from "../../config.js";
 import { spawnDedicatedArc, waitForCdp, type DedicatedArc } from "./launcher.js";
 import { CdpConnection } from "./connection.js";
 import { SNAPSHOT_JS, GET_TEXT_JS, evalExprJs, waitTextJs } from "../live/liveJs.js";
+import { assertRef } from "../ref.js";
+import { log } from "../../lib/log.js";
+import type { CdpRecorder } from "./recorder.js";
+import {
+  startTrace as beginTrace,
+  stopTrace as endTrace,
+  emulate as applyEmulation,
+  takeHeapSnapshot as captureHeapSnapshot,
+  type TraceSession,
+  type TraceSummary,
+  type EmulateOptions,
+  type HeapSnapshotResult,
+} from "./cdpSession.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -18,49 +31,150 @@ export class CdpEngine implements Engine {
   readonly name = "cdp" as const;
   private dedicated: DedicatedArc | null = null;
   private conn = new CdpConnection();
+  private trace: TraceSession | null = null;
+  private emulationSessions = new WeakMap<Page, CDPSession>();
 
   constructor(private config: Config) {}
 
   async ensureReady(): Promise<void> {
     if (this.conn.connected) return;
     const port = this.config.cdpPort || 9222;
+    const timeout = this.config.cdpTimeoutMs;
+    const capture = this.config.cdpMode !== "attach" || this.config.allowAttachCapture;
     if (this.config.cdpMode === "attach") {
-      await this.conn.connect(port);
+      await this.conn.connect(port, timeout, capture);
       return;
     }
-    const proc = spawnDedicatedArc(this.config.arcBin, this.config.cdpProfileDir, port);
-    this.dedicated = { proc, port };
+    this.dedicated = spawnDedicatedArc(this.config.arcBin, this.config.cdpProfileDir, port);
     try {
-      await waitForCdp(port);
-      await this.conn.connect(port);
+      await waitForCdp(port, timeout);
+      await this.conn.connect(port, timeout, capture);
     } catch (err) {
+      const logs = this.dedicated?.recentLogs() ?? [];
       await this.dispose();
-      throw err;
+      const base = err instanceof Error ? err.message : String(err);
+      const detail = logs.length > 0 ? `\nlast dedicated Arc output:\n${logs.join("\n")}` : "";
+      throw new Error(base + detail);
     }
   }
 
   async dispose(): Promise<void> {
+    this.trace = null;
     await this.conn.disconnect();
     if (this.dedicated) {
       const { proc } = this.dedicated;
       this.dedicated = null;
       try {
         proc.kill("SIGTERM");
-      } catch {}
+      } catch (e) {
+        log.debug("SIGTERM failed", String(e));
+      }
       await delay(1500);
       try {
         proc.kill("SIGKILL");
-      } catch {}
+      } catch (e) {
+        log.debug("SIGKILL failed", String(e));
+      }
     }
   }
 
   private async page(): Promise<Page> {
+    return this.cdpPage();
+  }
+
+  async cdpPage(pageId?: number): Promise<Page> {
     await this.ensureReady();
+    if (pageId !== undefined) {
+      const page = this.conn.recorder.pageById(pageId);
+      if (!page) throw new Error(`no page with pageId ${pageId}; run arc_list_tabs to see page ids`);
+      return page;
+    }
     return this.conn.activePage();
   }
 
+  recorder(): CdpRecorder {
+    return this.conn.recorder;
+  }
+
+  captureEnabled(): boolean {
+    return this.conn.captureEnabled;
+  }
+
+  async startTrace(categories?: string): Promise<void> {
+    if (this.trace) throw new Error("a performance trace is already running; stop it first");
+    this.trace = await beginTrace(await this.cdpPage(), categories);
+  }
+
+  async stopTrace(): Promise<TraceSummary> {
+    if (!this.trace) throw new Error("no performance trace is running; start one first");
+    const summary = await endTrace(this.trace);
+    this.trace = null;
+    return summary;
+  }
+
+  async emulate(opts: EmulateOptions): Promise<string[]> {
+    const page = await this.cdpPage();
+    let session = this.emulationSessions.get(page);
+    if (!session) {
+      session = await page.context().newCDPSession(page);
+      this.emulationSessions.set(page, session);
+    }
+    return applyEmulation(session, opts);
+  }
+
+  async resizePage(width: number, height: number): Promise<boolean> {
+    const page = await this.cdpPage();
+    let okFlag = true;
+    await page.setViewportSize({ width, height }).catch((e) => {
+      log.debug("resize failed", String(e));
+      okFlag = false;
+    });
+    return okFlag;
+  }
+
+  async hover(ref: string): Promise<void> {
+    const page = await this.cdpPage();
+    await this.locator(page, ref).hover({ timeout: 10000 });
+  }
+
+  async drag(fromRef: string, toRef: string): Promise<void> {
+    const page = await this.cdpPage();
+    await this.locator(page, fromRef).dragTo(this.locator(page, toRef), { timeout: 10000 });
+  }
+
+  async pressKey(key: string, ref?: string): Promise<void> {
+    const page = await this.cdpPage();
+    if (ref !== undefined) await this.locator(page, ref).press(key, { timeout: 10000 });
+    else await page.keyboard.press(key);
+  }
+
+  async fillForm(fields: Array<{ ref: string; value: string }>): Promise<number> {
+    const page = await this.cdpPage();
+    for (const f of fields) await this.locator(page, f.ref).fill(f.value, { timeout: 10000 });
+    return fields.length;
+  }
+
+  async uploadFile(ref: string, paths: string[]): Promise<void> {
+    const page = await this.cdpPage();
+    await this.locator(page, ref).setInputFiles(paths, { timeout: 10000 });
+  }
+
+  async takeHeapSnapshot(): Promise<HeapSnapshotResult> {
+    return captureHeapSnapshot(await this.cdpPage());
+  }
+
+  async handleDialog(action: "accept" | "dismiss", promptText?: string, pageId?: number): Promise<string> {
+    const page = await this.cdpPage(pageId);
+    const dialog = this.conn.recorder.takeDialog(page);
+    if (!dialog) throw new Error("no pending dialog on the active page");
+    const type = dialog.type();
+    if (action === "accept") await dialog.accept(promptText);
+    else await dialog.dismiss();
+    return type;
+  }
+
   private locator(page: Page, ref: string) {
-    if (!/^\d+$/.test(ref)) throw new Error(`invalid ref "${ref}"; use a ref from arc_snapshot`);
+    assertRef(ref);
     return page.locator(`[data-arcmcp-ref="${ref}"]`);
   }
 
@@ -145,7 +259,7 @@ export class CdpEngine implements Engine {
       try {
         title = await p.title();
       } catch {}
-      tabs.push({ index: i, title, url: p.url(), active: p === active });
+      tabs.push({ index: i, title, url: p.url(), active: p === active, pageId: this.conn.recorder.pageIdOf(p) });
     }
     return tabs;
   }

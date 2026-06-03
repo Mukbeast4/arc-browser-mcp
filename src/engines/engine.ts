@@ -10,6 +10,7 @@ export interface TabInfo {
   title: string;
   url: string;
   active: boolean;
+  pageId?: number;
 }
 
 export interface ScreenshotResult {

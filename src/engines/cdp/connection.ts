@@ -1,12 +1,20 @@
 import { chromium, type Browser, type Page } from "playwright-core";
+import { log } from "../../lib/log.js";
+import { CdpRecorder } from "./recorder.js";
 
 export class CdpConnection {
   private browser: Browser | null = null;
   private active: Page | null = null;
+  readonly recorder = new CdpRecorder();
+  private capture = false;
 
-  async connect(port: number): Promise<void> {
-    this.browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: 20000 });
+  async connect(port: number, timeoutMs = 20000, capture = true): Promise<void> {
+    this.browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, { timeout: timeoutMs });
+    this.capture = capture;
+    if (capture) this.recorder.attachAll(this.browser);
     this.browser.on("disconnected", () => {
+      log.debug("cdp disconnected");
+      this.recorder.clear();
       this.browser = null;
       this.active = null;
     });
@@ -14,6 +22,10 @@ export class CdpConnection {
 
   get connected(): boolean {
     return this.browser !== null;
+  }
+
+  get captureEnabled(): boolean {
+    return this.capture;
   }
 
   pages(): Page[] {
@@ -33,11 +45,16 @@ export class CdpConnection {
     if (this.active && !this.active.isClosed() && pages.indexOf(this.active) >= 0) {
       return this.active;
     }
+    if (this.active) log.debug("active page no longer available, re-electing");
     if (pages.length === 0) {
       const ctx = this.browser.contexts()[0] ?? (await this.browser.newContext());
-      this.active = await ctx.newPage();
-      await this.active.setViewportSize({ width: 1280, height: 800 }).catch(() => {});
-      return this.active;
+      const page = await ctx.newPage();
+      if (this.capture) this.recorder.attach(page);
+      await page
+        .setViewportSize({ width: 1280, height: 800 })
+        .catch((e) => log.debug("setViewportSize failed", String(e)));
+      this.active = page;
+      return page;
     }
     this.active = pages[0] as Page;
     return this.active;
@@ -52,7 +69,10 @@ export class CdpConnection {
     if (!this.browser) throw new Error("CDP not connected");
     const ctx = this.browser.contexts()[0] ?? (await this.browser.newContext());
     const page = await ctx.newPage();
-    await page.setViewportSize({ width: 1280, height: 800 }).catch(() => {});
+    if (this.capture) this.recorder.attach(page);
+    await page
+      .setViewportSize({ width: 1280, height: 800 })
+      .catch((e) => log.debug("setViewportSize failed", String(e)));
     if (url) await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     this.active = page;
     return page;
@@ -62,7 +82,10 @@ export class CdpConnection {
     if (this.browser) {
       try {
         await this.browser.close();
-      } catch {}
+      } catch (e) {
+        log.debug("browser close failed", String(e));
+      }
+      this.recorder.clear();
       this.browser = null;
       this.active = null;
     }

@@ -10,6 +10,8 @@ export interface Config {
   cdpProfileDir: string;
   cdpPort: number;
   cdpMode: CdpMode;
+  cdpTimeoutMs: number;
+  allowAttachCapture: boolean;
 }
 
 function env(key: string, fallback: string): string {
@@ -27,5 +29,7 @@ export function loadConfig(): Config {
     ),
     cdpPort: parseInt(env("ARC_MCP_CDP_PORT", "0"), 10) || 0,
     cdpMode: env("ARC_MCP_CDP_MODE", "dedicated") === "attach" ? "attach" : "dedicated",
+    cdpTimeoutMs: parseInt(env("ARC_MCP_CDP_TIMEOUT_MS", "30000"), 10) || 30000,
+    allowAttachCapture: env("ARC_MCP_ALLOW_ATTACH_CAPTURE", "") === "1",
   };
 }
