@@ -11,9 +11,11 @@ import {
   startTrace as beginTrace,
   stopTrace as endTrace,
   emulate as applyEmulation,
+  takeHeapSnapshot as captureHeapSnapshot,
   type TraceSession,
   type TraceSummary,
   type EmulateOptions,
+  type HeapSnapshotResult,
 } from "./cdpSession.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -148,6 +150,10 @@ export class CdpEngine implements Engine {
   async uploadFile(ref: string, paths: string[]): Promise<void> {
     const page = await this.cdpPage();
     await this.locator(page, ref).setInputFiles(paths, { timeout: 10000 });
+  }
+
+  async takeHeapSnapshot(): Promise<HeapSnapshotResult> {
+    return captureHeapSnapshot(await this.cdpPage());
   }
 
   async handleDialog(action: "accept" | "dismiss", promptText?: string): Promise<string> {

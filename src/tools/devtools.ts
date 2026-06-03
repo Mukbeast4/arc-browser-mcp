@@ -176,6 +176,20 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
   );
 
   server.registerTool(
+    "arc_take_heap_snapshot",
+    {
+      description:
+        "Capture a V8 heap snapshot of the active CDP page, write it to a temp .heapsnapshot file, and return its path and summary (requires arc_cdp_start). Open the file in Chrome DevTools > Memory to analyze retainers.",
+    },
+    async () =>
+      guard(ctx, async () => {
+        const cdp = requireCdp(ctx);
+        const r = await cdp.takeHeapSnapshot();
+        return ok([`path: ${r.path}`, `bytes: ${r.bytes}`, `nodes: ${r.nodeCount ?? "n/a"}`].join("\n"));
+      }),
+  );
+
+  server.registerTool(
     "arc_performance_start_trace",
     {
       description:

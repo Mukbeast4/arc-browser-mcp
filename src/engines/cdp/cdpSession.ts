@@ -1,4 +1,7 @@
 import type { Page, CDPSession } from "playwright-core";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 interface LooseSession {
   send(method: string, params?: unknown): Promise<unknown>;
@@ -115,4 +118,27 @@ export async function emulate(page: Page, opts: EmulateOptions): Promise<string[
     applied.push(`geolocation ${opts.latitude},${opts.longitude}`);
   }
   return applied;
+}
+
+export interface HeapSnapshotResult {
+  path: string;
+  bytes: number;
+  nodeCount: number | null;
+}
+
+export async function takeHeapSnapshot(page: Page): Promise<HeapSnapshotResult> {
+  const s = loose(await page.context().newCDPSession(page));
+  const chunks: string[] = [];
+  s.on("HeapProfiler.addHeapSnapshotChunk", (p) => {
+    const chunk = (p as { chunk?: string }).chunk;
+    if (typeof chunk === "string") chunks.push(chunk);
+  });
+  await s.send("HeapProfiler.enable");
+  await s.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false, captureNumericValue: false });
+  await s.detach().catch(() => {});
+  const data = chunks.join("");
+  const path = join(tmpdir(), `arc-mcp-heap-${process.pid}-${Date.now()}.heapsnapshot`);
+  await writeFile(path, data, "utf8");
+  const match = data.slice(0, 4096).match(/"node_count":(\d+)/);
+  return { path, bytes: Buffer.byteLength(data), nodeCount: match ? parseInt(match[1], 10) : null };
 }
