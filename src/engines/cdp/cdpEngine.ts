@@ -4,6 +4,7 @@ import type { Config } from "../../config.js";
 import { spawnDedicatedArc, waitForCdp, type DedicatedArc } from "./launcher.js";
 import { CdpConnection } from "./connection.js";
 import { SNAPSHOT_JS, GET_TEXT_JS, evalExprJs, waitTextJs } from "../live/liveJs.js";
+import { assertRef } from "../ref.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -60,7 +61,7 @@ export class CdpEngine implements Engine {
   }
 
   private locator(page: Page, ref: string) {
-    if (!/^\d+$/.test(ref)) throw new Error(`invalid ref "${ref}"; use a ref from arc_snapshot`);
+    assertRef(ref);
     return page.locator(`[data-arcmcp-ref="${ref}"]`);
   }
 

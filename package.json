@@ -10,7 +10,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "check": "bun run typecheck && bun run test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
