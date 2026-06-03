@@ -123,6 +123,43 @@ export class CdpEngine implements Engine {
     return okFlag;
   }
 
+  async hover(ref: string): Promise<void> {
+    const page = await this.cdpPage();
+    await this.locator(page, ref).hover({ timeout: 10000 });
+  }
+
+  async drag(fromRef: string, toRef: string): Promise<void> {
+    const page = await this.cdpPage();
+    await this.locator(page, fromRef).dragTo(this.locator(page, toRef), { timeout: 10000 });
+  }
+
+  async pressKey(key: string, ref?: string): Promise<void> {
+    const page = await this.cdpPage();
+    if (ref !== undefined) await this.locator(page, ref).press(key, { timeout: 10000 });
+    else await page.keyboard.press(key);
+  }
+
+  async fillForm(fields: Array<{ ref: string; value: string }>): Promise<number> {
+    const page = await this.cdpPage();
+    for (const f of fields) await this.locator(page, f.ref).fill(f.value, { timeout: 10000 });
+    return fields.length;
+  }
+
+  async uploadFile(ref: string, paths: string[]): Promise<void> {
+    const page = await this.cdpPage();
+    await this.locator(page, ref).setInputFiles(paths, { timeout: 10000 });
+  }
+
+  async handleDialog(action: "accept" | "dismiss", promptText?: string): Promise<string> {
+    const page = await this.cdpPage();
+    const dialog = this.conn.recorder.takeDialog(page);
+    if (!dialog) throw new Error("no pending dialog on the active page");
+    const type = dialog.type();
+    if (action === "accept") await dialog.accept(promptText);
+    else await dialog.dismiss();
+    return type;
+  }
+
   private locator(page: Page, ref: string) {
     assertRef(ref);
     return page.locator(`[data-arcmcp-ref="${ref}"]`);
