@@ -12,6 +12,7 @@ import { registerPageTools } from "./tools/page.js";
 import { registerTabTools } from "./tools/tabs.js";
 import { registerArcUiTools } from "./tools/arcui.js";
 import { registerEngineTools } from "./tools/engine.js";
+import { registerDevtoolsTools } from "./tools/devtools.js";
 import type { ServerContext } from "./context.js";
 
 async function main(): Promise<void> {
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
   registerTabTools(server, ctx);
   registerArcUiTools(server, ctx);
   registerEngineTools(server, ctx);
+  registerDevtoolsTools(server, ctx);
 
   const shutdown = async () => {
     const restore = ctx.active === "cdp" && ctx.config.cdpMode === "dedicated";

@@ -6,6 +6,7 @@ import { CdpConnection } from "./connection.js";
 import { SNAPSHOT_JS, GET_TEXT_JS, evalExprJs, waitTextJs } from "../live/liveJs.js";
 import { assertRef } from "../ref.js";
 import { log } from "../../lib/log.js";
+import type { CdpRecorder } from "./recorder.js";
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -27,14 +28,15 @@ export class CdpEngine implements Engine {
     if (this.conn.connected) return;
     const port = this.config.cdpPort || 9222;
     const timeout = this.config.cdpTimeoutMs;
+    const capture = this.config.cdpMode !== "attach" || this.config.allowAttachCapture;
     if (this.config.cdpMode === "attach") {
-      await this.conn.connect(port, timeout);
+      await this.conn.connect(port, timeout, capture);
       return;
     }
     this.dedicated = spawnDedicatedArc(this.config.arcBin, this.config.cdpProfileDir, port);
     try {
       await waitForCdp(port, timeout);
-      await this.conn.connect(port, timeout);
+      await this.conn.connect(port, timeout, capture);
     } catch (err) {
       const logs = this.dedicated?.recentLogs() ?? [];
       await this.dispose();
@@ -64,8 +66,25 @@ export class CdpEngine implements Engine {
   }
 
   private async page(): Promise<Page> {
+    return this.cdpPage();
+  }
+
+  async cdpPage(pageId?: number): Promise<Page> {
     await this.ensureReady();
+    if (pageId !== undefined) {
+      const page = this.conn.recorder.pageById(pageId);
+      if (!page) throw new Error(`no page with pageId ${pageId}; run arc_list_tabs to see page ids`);
+      return page;
+    }
     return this.conn.activePage();
+  }
+
+  recorder(): CdpRecorder {
+    return this.conn.recorder;
+  }
+
+  captureEnabled(): boolean {
+    return this.conn.captureEnabled;
   }
 
   private locator(page: Page, ref: string) {
@@ -154,7 +173,7 @@ export class CdpEngine implements Engine {
       try {
         title = await p.title();
       } catch {}
-      tabs.push({ index: i, title, url: p.url(), active: p === active });
+      tabs.push({ index: i, title, url: p.url(), active: p === active, pageId: this.conn.recorder.pageIdOf(p) });
     }
     return tabs;
   }
