@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ServerContext } from "../context.js";
 import { guard, ok, fail } from "./result.js";
+import { enforce } from "./enforce.js";
 import { isArcRunning, quitArcGracefully, relaunchUserArc } from "../engines/cdp/launcher.js";
 
 export function registerEngineTools(server: McpServer, ctx: ServerContext): void {
@@ -16,9 +17,11 @@ export function registerEngineTools(server: McpServer, ctx: ServerContext): void
           .optional()
           .describe("Allow quitting your running Arc so the dedicated instance can take over"),
       },
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async ({ confirmQuitDaily }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_cdp_start", kind: "engine", args: { confirmQuitDaily } });
         if (ctx.active === "cdp") return ok("already in CDP mode");
         let quitDaily = false;
         if (ctx.config.cdpMode === "dedicated" && isArcRunning()) {
@@ -50,9 +53,11 @@ export function registerEngineTools(server: McpServer, ctx: ServerContext): void
     "arc_cdp_stop",
     {
       description: "Leave CDP mode: shut down the dedicated Arc instance and relaunch your normal Arc. Page/tab tools return to the live engine.",
+      annotations: { readOnlyHint: false },
     },
     async () =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_cdp_stop", kind: "engine" });
         if (ctx.active !== "cdp") return ok("not in CDP mode");
         await ctx.cdp.dispose();
         ctx.active = "live";

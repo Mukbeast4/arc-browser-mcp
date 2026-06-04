@@ -208,6 +208,14 @@ export class CdpEngine implements Engine {
     return { url: v.url, title: v.title, tree: v.tree, refCount: v.count };
   }
 
+  async currentUrl(): Promise<string> {
+    try {
+      return (await this.page()).url();
+    } catch {
+      return "";
+    }
+  }
+
   async click(ref: string): Promise<void> {
     const page = await this.page();
     await this.locator(page, ref).click({ timeout: 10000 });

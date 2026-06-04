@@ -106,6 +106,12 @@ end tell`;
   return { window: f[0] ?? "", space: f[1] ?? "", tabTitle: f[2] ?? "", tabUrl: f[3] ?? "" };
 }
 
+export async function activeTabUrl(): Promise<string> {
+  const r = await runAppleScript('tell application "Arc" to return URL of active tab of front window');
+  if (!r.ok) return "";
+  return r.output.trim().replace(/^"|"$/g, "");
+}
+
 export async function littleArc(url: string): Promise<void> {
   const safe = escapeForAppleScript(url);
   const r = await runAppleScript(`tell application "Arc" to make new tab with properties {URL:"${safe}"}`);

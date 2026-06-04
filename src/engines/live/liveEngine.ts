@@ -1,6 +1,7 @@
 import type { Engine, PageSnapshot, ScreenshotResult, TabInfo } from "../engine.js";
 import { runAppleScript } from "./osascript.js";
 import { captureArcWindow } from "./screenshot.js";
+import { activeTabUrl } from "./arcUi.js";
 import { escapeForAppleScript, mapError } from "./appleScriptUtil.js";
 import {
   SNAPSHOT_JS,
@@ -86,6 +87,10 @@ export class LiveEngine implements Engine {
   async snapshot(): Promise<PageSnapshot> {
     const v = await this.runPage<{ url: string; title: string; count: number; tree: string }>(SNAPSHOT_JS);
     return { url: v.url, title: v.title, tree: v.tree, refCount: v.count };
+  }
+
+  async currentUrl(): Promise<string> {
+    return activeTabUrl();
   }
 
   async click(ref: string): Promise<void> {

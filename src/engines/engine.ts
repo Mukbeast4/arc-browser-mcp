@@ -27,6 +27,7 @@ export interface Engine {
   goBack(): Promise<PageSnapshot>;
   goForward(): Promise<PageSnapshot>;
   snapshot(): Promise<PageSnapshot>;
+  currentUrl(): Promise<string>;
   click(ref: string): Promise<void>;
   type(ref: string, text: string, submit: boolean): Promise<void>;
   fill(ref: string, value: string): Promise<void>;
