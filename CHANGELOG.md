@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-06-04
+
+### Changed
+
+- Added npm package metadata (`repository`, `homepage`, `bugs`, `keywords`, `license`, `author`) so the npm page links back to the repository and the project is discoverable in npm search.
+
 ## [0.2.2] - 2026-06-04
 
 ### Changed
@@ -58,7 +64,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Initial dual-engine Arc MCP server: a live AppleScript engine and a CDP (Playwright) engine behind one tool surface, with page, tab, Space, and window tools, accessibility snapshots, screenshots, and engine switching.
 
-[Unreleased]: https://github.com/Mukbeast4/arc-browser-mcp/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Mukbeast4/arc-browser-mcp/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Mukbeast4/arc-browser-mcp/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Mukbeast4/arc-browser-mcp/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Mukbeast4/arc-browser-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Mukbeast4/arc-browser-mcp/compare/cb14513...v0.2.0
