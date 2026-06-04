@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in safety policy, all off by default (behavior unchanged when unset): `ARC_MCP_READ_ONLY` (refuse mutating tools, including `arc_evaluate`), `ARC_MCP_ALLOW_ORIGINS` / `ARC_MCP_DENY_ORIGINS` (gate navigation, page reads, and interaction against the tab's current origin; filter captured network/console entries; disable `arc_evaluate` while active), and `ARC_MCP_BLOCK_SCHEMES` (refuse schemes such as `javascript:`/`data:`/`file:` on navigation and on the current tab).
+- `ARC_MCP_AUDIT_LOG`: append a local JSONL record (`timestamp, tool, kind, decision, reason, args`) per tool call, file mode `0600`, no network.
+- MCP tool annotations (`readOnlyHint` / `destructiveHint` / `openWorldHint`) on every tool so cooperating clients can prompt before destructive actions.
+- `Engine.currentUrl()` (live via AppleScript, CDP via the page handle) backing current-origin enforcement.
+- `arc_status` now reports safety-policy and audit-log state.
+- Unit tests for the policy engine, audit formatting, the enforcement choke point, and the new config fields.
+
+### Security
+
+- The origin policy enforces against the tab's current URL (covering redirects and the already-open tab), and captured network/console results are filtered to permitted origins, rather than checking only the navigation argument.
+- Enforcement is server-side; MCP annotations are advisory hints only. On the live engine current-origin checks are best-effort (the frontmost tab can change between check and action) — the CDP engine, on a dedicated isolated profile, is recommended for sensitive use. See the README "Security model" for what the layer does and does not protect against.
+
 ## [0.2.0] - 2026-06-04
 
 ### Added

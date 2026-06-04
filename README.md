@@ -7,7 +7,7 @@
 
 `arc-mcp` lets your coding agent drive the [Arc browser](https://arc.net) on macOS as an MCP server: test web apps inside your real logged-in session, automate Arc's own UI (Spaces, tabs, windows), and run general browsing tasks. It exposes two engines behind one tool surface — a **live** engine (your running Arc, via AppleScript) and a **cdp** engine (a dedicated, debuggable Arc instance, via the Chrome DevTools Protocol).
 
-## [Tool reference](./docs/tool-reference.md) | [Getting started](#getting-started) | [Configuration](#configuration) | [Concepts](#concepts) | [Limitations](#known-limitations)
+## [Tool reference](./docs/tool-reference.md) | [Getting started](#getting-started) | [Configuration](#configuration) | [Concepts](#concepts) | [Security](#security-model) | [Limitations](#known-limitations)
 
 ## Key features
 
@@ -19,7 +19,7 @@
 
 ## Disclaimers
 
-`arc-mcp` exposes the content of your browser to the MCP client, which can inspect, read, and modify any page the agent navigates to. In live mode it acts inside your real, logged-in Arc. Avoid pointing it at sensitive accounts you don't want the agent to touch.
+`arc-mcp` exposes the content of your browser to the MCP client, which can inspect, read, and modify any page the agent navigates to. In live mode it acts inside your real, logged-in Arc. Avoid pointing it at sensitive accounts you don't want the agent to touch. Opt-in guardrails — read-only mode, an origin allow/deny policy, scheme blocking, and a local audit log — are available; see [Security model](#security-model).
 
 macOS only. Arc is in maintenance mode (The Browser Company / Atlassian); the automation surfaces used here are stable but frozen.
 
@@ -185,6 +185,33 @@ Set these via the `env` block in your MCP configuration.
   - **Type:** string (`debug` | `info` | `warn` | `error`)
   - **Default:** `info`
 
+The following are the opt-in safety controls (see [Security model](#security-model)). All are unset by default, leaving behavior unchanged.
+
+- **`ARC_MCP_READ_ONLY`**
+  Refuse every mutating tool (navigation, click, type/fill, `arc_evaluate`, tab close, Space focus). Reads, listings, and engine switching still work.
+  - **Type:** string (`1` to enable)
+  - **Default:** unset (disabled)
+
+- **`ARC_MCP_ALLOW_ORIGINS`**
+  Origins the agent may navigate to, read, and act on. When set, every other origin is refused — including the tab the agent is already on, for both reads and writes. Exact `scheme://host[:port]` match, no wildcards.
+  - **Type:** string (comma-separated origins)
+  - **Default:** unset (all origins allowed)
+
+- **`ARC_MCP_DENY_ORIGINS`**
+  Origins that are always refused, taking precedence over the allow-list.
+  - **Type:** string (comma-separated origins)
+  - **Default:** unset
+
+- **`ARC_MCP_BLOCK_SCHEMES`**
+  URL schemes to refuse on navigation and on the current tab, e.g. `javascript,data,file,chrome,about,blob`.
+  - **Type:** string (comma-separated schemes)
+  - **Default:** unset
+
+- **`ARC_MCP_AUDIT_LOG`**
+  Path to a local JSONL file; one record (`timestamp, tool, kind, decision, reason, args`) is appended per call. Created with mode `0600`, written locally, never sent anywhere. It records full URLs and argument values (including text typed into forms), so treat the file as sensitive and keep it out of synced/backed-up directories.
+  - **Type:** string (file path)
+  - **Default:** unset (no audit log)
+
 ## Concepts
 
 ### Two engines, and why
@@ -208,6 +235,33 @@ Arc is Chromium-based, but modern Chromium (136+) refuses remote debugging on yo
 - **Screen Recording** and **Accessibility** — only for `arc_screenshot` (live window capture).
 
 The CDP engine requires none of these.
+
+## Security model
+
+In `live` mode the agent acts inside your real, logged-in Arc and can read or modify any page. The controls below are **opt-in** (set them in the `env` block) and **off by default** — without them the server behaves as it always has.
+
+- **Read-only mode** (`ARC_MCP_READ_ONLY=1`) refuses every mutating tool, including `arc_evaluate`.
+- **Origin policy** (`ARC_MCP_ALLOW_ORIGINS` / `ARC_MCP_DENY_ORIGINS`) gates navigation, page reads, and page interaction against the tab's **current** origin — not just the URL you pass — so it also covers redirects and the tab you are already on. Captured network and console entries are filtered to permitted origins. `arc_evaluate` is disabled whenever an origin policy is active.
+- **Scheme blocking** (`ARC_MCP_BLOCK_SCHEMES`) refuses dangerous URL schemes (`javascript:`, `data:`, `file:`, …) on navigation and on the current tab.
+- **Audit log** (`ARC_MCP_AUDIT_LOG`) records every call to a local file; no network is involved.
+- **MCP annotations** mark each tool with `readOnlyHint` / `destructiveHint`, so a cooperating client can prompt before destructive actions. These are advisory hints, not the boundary — the server-side checks above are the boundary.
+
+What it does **not** do:
+
+- It cannot stop exfiltration that does not change the URL: a page (or `arc_evaluate`, if re-enabled) can `fetch()` page data to any endpoint while the visible origin stays allow-listed.
+- On the **live** engine the agent acts on whatever tab is frontmost in your real Arc; you or a redirect can change that between the origin check and the action, so the check is best-effort there. For strong guarantees use the **CDP** engine (`arc_cdp_start`), which drives a dedicated, isolated profile on a stable page handle.
+- A page already open on a sensitive origin before the server starts is only observed the first time a tool runs against it.
+
+A locked-down, read-only research session:
+
+```json
+"env": {
+  "ARC_MCP_READ_ONLY": "1",
+  "ARC_MCP_BLOCK_SCHEMES": "javascript,data,file",
+  "ARC_MCP_ALLOW_ORIGINS": "https://github.com,https://news.ycombinator.com",
+  "ARC_MCP_AUDIT_LOG": "/Users/you/arc-mcp-audit.jsonl"
+}
+```
 
 ## Known limitations
 

@@ -2,6 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ServerContext } from "../context.js";
 import { guard, ok } from "./result.js";
+import { enforce } from "./enforce.js";
+import { bufferEntryAllowed } from "../lib/policy.js";
 import type { CdpEngine } from "../engines/cdp/cdpEngine.js";
 import type { ConsoleEntry, NetworkEntry, PageBuffers } from "../engines/cdp/recorder.js";
 
@@ -21,6 +23,12 @@ function requireCapture(ctx: ServerContext): CdpEngine {
     );
   }
   return cdp;
+}
+
+function originFilter(ctx: ServerContext): ((url: string) => boolean) | null {
+  const pol = ctx.config.policy;
+  if (pol.allowOrigins.length === 0 && pol.denyOrigins.length === 0) return null;
+  return (url: string) => bufferEntryAllowed(pol, url);
 }
 
 async function resolveBuffers(
@@ -68,15 +76,18 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         offset: z.number().int().nonnegative().optional(),
         pageId: z.number().int().nonnegative().optional().describe("Target page id from arc_list_tabs; defaults to active"),
       },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ level, limit, offset, pageId }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_list_console_messages", kind: "read-buffer", args: { level, limit, offset, pageId } });
         const { buffers, pageId: pid } = await resolveBuffers(ctx, pageId);
         const off = offset ?? 0;
+        const of = originFilter(ctx);
         const { items, total } = buffers.console.slice(
           off,
           limit ?? 50,
-          level ? (e: ConsoleEntry) => e.type === level : undefined,
+          (e: ConsoleEntry) => (level ? e.type === level : true) && (of ? of(e.url) : true),
         );
         const lines = items.map((e) => {
           const text = e.text.length > LIST_TEXT_CAP ? e.text.slice(0, LIST_TEXT_CAP) + "…" : e.text;
@@ -94,12 +105,16 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         id: z.number().int().nonnegative(),
         pageId: z.number().int().nonnegative().optional(),
       },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ id, pageId }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_get_console_message", kind: "read-buffer", args: { id, pageId } });
         const { buffers } = await resolveBuffers(ctx, pageId);
         const e = buffers.console.getById(id);
         if (!e) return ok(`console message #${id} not found (it may have been evicted from the buffer)`);
+        const of = originFilter(ctx);
+        if (of && !of(e.url)) return ok(`console message #${id} is on an origin not permitted by the policy`);
         return ok(
           [
             `#${e.id} [${e.type}]`,
@@ -123,17 +138,21 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         offset: z.number().int().nonnegative().optional(),
         pageId: z.number().int().nonnegative().optional(),
       },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ resourceType, status, limit, offset, pageId }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_list_network_requests", kind: "read-buffer", args: { resourceType, status, limit, offset, pageId } });
         const { buffers, pageId: pid } = await resolveBuffers(ctx, pageId);
         const off = offset ?? 0;
+        const of = originFilter(ctx);
         const { items, total } = buffers.network.slice(
           off,
           limit ?? 50,
           (e: NetworkEntry) =>
             (resourceType ? e.resourceType === resourceType : true) &&
-            (status !== undefined ? e.status === status : true),
+            (status !== undefined ? e.status === status : true) &&
+            (of ? of(e.url) : true),
         );
         const lines = items.map((e) => {
           const st = e.failed ? "FAILED" : e.status === null ? "pending" : String(e.status);
@@ -154,12 +173,16 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         includeBody: z.boolean().optional(),
         pageId: z.number().int().nonnegative().optional(),
       },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ id, includeBody, pageId }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_get_network_request", kind: "read-buffer", args: { id, includeBody, pageId } });
         const { buffers } = await resolveBuffers(ctx, pageId);
         const e = buffers.network.getById(id);
         if (!e) return ok(`network request #${id} not found (it may have been evicted from the buffer)`);
+        const of = originFilter(ctx);
+        if (of && !of(e.url)) return ok(`network request #${id} is on an origin not permitted by the policy`);
         const lines = [
           `#${e.id} ${e.method} ${e.url}`,
           `resourceType: ${e.resourceType}`,
@@ -180,9 +203,11 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
     {
       description:
         "Capture a V8 heap snapshot of the active CDP page, write it to a temp .heapsnapshot file, and return its path and summary (requires arc_cdp_start). Open the file in Chrome DevTools > Memory to analyze retainers.",
+      annotations: { readOnlyHint: false },
     },
     async () =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_take_heap_snapshot", kind: "write" });
         const cdp = requireCdp(ctx);
         const r = await cdp.takeHeapSnapshot();
         return ok([`path: ${r.path}`, `bytes: ${r.bytes}`, `nodes: ${r.nodeCount ?? "n/a"}`].join("\n"));
@@ -198,9 +223,11 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         reload: z.boolean().optional().describe("Reload the page after starting, to capture the full load"),
         categories: z.string().optional().describe("Comma-separated trace categories"),
       },
+      annotations: { readOnlyHint: false },
     },
     async ({ reload, categories }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_performance_start_trace", kind: "write", args: { reload, categories } });
         const cdp = requireCdp(ctx);
         await cdp.startTrace(categories);
         if (reload) await cdp.reload();
@@ -210,9 +237,13 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
 
   server.registerTool(
     "arc_performance_stop_trace",
-    { description: "Stop the running performance trace and return a summary (requires arc_cdp_start)." },
+    {
+      description: "Stop the running performance trace and return a summary (requires arc_cdp_start).",
+      annotations: { readOnlyHint: false },
+    },
     async () =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_performance_stop_trace", kind: "write" });
         const cdp = requireCdp(ctx);
         const summary = await cdp.stopTrace();
         const lines = [`events: ${summary.events}`, `durationMs: ${summary.durationMs}`];
@@ -235,9 +266,15 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         latitude: z.number().optional(),
         longitude: z.number().optional(),
       },
+      annotations: { readOnlyHint: false },
     },
     async ({ width, height, userAgent, cpuThrottling, networkThrottling, latitude, longitude }) =>
       guard(ctx, async () => {
+        await enforce(ctx, {
+          tool: "arc_emulate",
+          kind: "write",
+          args: { width, height, userAgent, cpuThrottling, networkThrottling, latitude, longitude },
+        });
         const cdp = requireCapture(ctx);
         const applied = await cdp.emulate({
           width,
@@ -261,9 +298,11 @@ export function registerDevtoolsTools(server: McpServer, ctx: ServerContext): vo
         width: z.number().int().positive(),
         height: z.number().int().positive(),
       },
+      annotations: { readOnlyHint: false },
     },
     async ({ width, height }) =>
       guard(ctx, async () => {
+        await enforce(ctx, { tool: "arc_resize_page", kind: "write", args: { width, height } });
         const cdp = requireCdp(ctx);
         const okFlag = await cdp.resizePage(width, height);
         return ok(
