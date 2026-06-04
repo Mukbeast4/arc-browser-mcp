@@ -26,7 +26,7 @@ async function main(): Promise<void> {
     active: config.defaultEngine,
   };
 
-  const server = new McpServer({ name: "arc-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "arc-browser-mcp", version: "0.2.2" });
   registerMetaTools(server, ctx);
   registerPageTools(server, ctx);
   registerTabTools(server, ctx);

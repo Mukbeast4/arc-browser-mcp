@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "arc-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/arc-mcp/dist/index.js"],
+    "arc-browser-mcp": {
+      "command": "npx",
+      "args": ["-y", "arc-browser-mcp"],
       "env": {
         "ARC_MCP_DEFAULT_ENGINE": "live"
       }

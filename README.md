@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-`arc-mcp` lets your coding agent drive the [Arc browser](https://arc.net) on macOS as an MCP server: test web apps inside your real logged-in session, automate Arc's own UI (Spaces, tabs, windows), and run general browsing tasks. It exposes two engines behind one tool surface — a **live** engine (your running Arc, via AppleScript) and a **cdp** engine (a dedicated, debuggable Arc instance, via the Chrome DevTools Protocol).
+`arc-browser-mcp` lets your coding agent drive the [Arc browser](https://arc.net) on macOS as an MCP server: test web apps inside your real logged-in session, automate Arc's own UI (Spaces, tabs, windows), and run general browsing tasks. It exposes two engines behind one tool surface — a **live** engine (your running Arc, via AppleScript) and a **cdp** engine (a dedicated, debuggable Arc instance, via the Chrome DevTools Protocol).
 
 ## [Tool reference](./docs/tool-reference.md) | [Getting started](#getting-started) | [Configuration](#configuration) | [Concepts](#concepts) | [Security](#security-model) | [Limitations](#known-limitations)
 
@@ -19,35 +19,28 @@
 
 ## Disclaimers
 
-`arc-mcp` exposes the content of your browser to the MCP client, which can inspect, read, and modify any page the agent navigates to. In live mode it acts inside your real, logged-in Arc. Avoid pointing it at sensitive accounts you don't want the agent to touch. Opt-in guardrails — read-only mode, an origin allow/deny policy, scheme blocking, and a local audit log — are available; see [Security model](#security-model).
+`arc-browser-mcp` exposes the content of your browser to the MCP client, which can inspect, read, and modify any page the agent navigates to. In live mode it acts inside your real, logged-in Arc. Avoid pointing it at sensitive accounts you don't want the agent to touch. Opt-in guardrails — read-only mode, an origin allow/deny policy, scheme blocking, and a local audit log — are available; see [Security model](#security-model).
 
 macOS only. Arc is in maintenance mode (The Browser Company / Atlassian); the automation surfaces used here are stable but frozen.
 
-No telemetry: `arc-mcp` collects nothing and makes no network calls of its own.
+No telemetry: `arc-browser-mcp` collects nothing and makes no network calls of its own.
 
 ## Requirements
 
 - macOS with [Arc](https://arc.net) installed at `/Applications/Arc.app`
 - [Node.js](https://nodejs.org) 20 or newer (the server runs under Node)
-- [Bun](https://bun.sh) to install and build
+- [Bun](https://bun.sh) only to build from source (not needed for the `npx` install)
 
 ## Getting started
 
-Build the server:
-
-```bash
-bun install
-bun run build
-```
-
-Add this configuration to your MCP client:
+The published package runs under Node via `npx` — no clone or build needed. Add this to your MCP client:
 
 ```json
 {
   "mcpServers": {
-    "arc-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/arc-mcp/dist/index.js"],
+    "arc-browser-mcp": {
+      "command": "npx",
+      "args": ["-y", "arc-browser-mcp"],
       "env": { "ARC_MCP_DEFAULT_ENGINE": "live" }
     }
   }
@@ -55,17 +48,15 @@ Add this configuration to your MCP client:
 ```
 
 > [!NOTE]
-> The server runs under **Node**, not Bun: Playwright's CDP transport hangs under Bun. Bun is only used to install and build.
+> `npx` launches the server under **Node**. Do not run it under Bun — Playwright's CDP transport hangs under Bun.
 
 ### MCP client configuration
 
 <details>
   <summary>Claude Code</summary>
 
-Use the Claude Code CLI to add the server at user scope:
-
 ```bash
-claude mcp add arc-mcp --scope user -- node /absolute/path/to/arc-mcp/dist/index.js
+claude mcp add arc-browser-mcp --scope user -- npx -y arc-browser-mcp
 ```
 
 </details>
@@ -73,7 +64,21 @@ claude mcp add arc-mcp --scope user -- node /absolute/path/to/arc-mcp/dist/index
 <details>
   <summary>Cursor / generic MCP client</summary>
 
-Use the JSON configuration above in your client's MCP settings, pointing `args` at the built `dist/index.js`. See [`.mcp.json.example`](./.mcp.json.example).
+Use the JSON configuration above in your client's MCP settings. See [`.mcp.json.example`](./.mcp.json.example).
+
+</details>
+
+<details>
+  <summary>From source (instead of npx)</summary>
+
+```bash
+git clone https://github.com/Mukbeast4/arc-browser-mcp.git
+cd arc-browser-mcp
+bun install
+bun run build
+```
+
+Then point your client at the built file with `"command": "node"` and `"args": ["/absolute/path/to/arc-browser-mcp/dist/index.js"]`.
 
 </details>
 
@@ -216,10 +221,10 @@ The following are the opt-in safety controls (see [Security model](#security-mod
 
 ### Two engines, and why
 
-Arc is Chromium-based, but modern Chromium (136+) refuses remote debugging on your default profile for security, and a debug port can only be opened at launch. An agent therefore **cannot** attach the Chrome DevTools Protocol to your everyday, logged-in Arc. `arc-mcp` resolves this with two engines:
+Arc is Chromium-based, but modern Chromium (136+) refuses remote debugging on your default profile for security, and a debug port can only be opened at launch. An agent therefore **cannot** attach the Chrome DevTools Protocol to your everyday, logged-in Arc. `arc-browser-mcp` resolves this with two engines:
 
 - **live** — drives your actual running Arc through AppleScript / Apple Events. Real profile, real logins, page interaction via injected JavaScript. This engine touches your real session.
-- **cdp** — drives a dedicated, debuggable Arc instance via `playwright-core`. Native screenshots and auto-waiting. Because Arc is single-instance, this requires your normal Arc to be closed; `arc-mcp` launches and manages its own instance.
+- **cdp** — drives a dedicated, debuggable Arc instance via `playwright-core`. Native screenshots and auto-waiting. Because Arc is single-instance, this requires your normal Arc to be closed; `arc-browser-mcp` launches and manages its own instance.
 
 ### Switching engines
 
