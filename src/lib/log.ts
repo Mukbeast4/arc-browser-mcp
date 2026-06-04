@@ -21,7 +21,7 @@ function serialize(value: unknown): string {
 function emit(level: Level, message: string, meta?: unknown): void {
   if (ORDER[level] < minLevel) return;
   const suffix = meta === undefined ? "" : " " + serialize(meta);
-  process.stderr.write(`[arc-mcp] ${level} ${message}${suffix}\n`);
+  process.stderr.write(`[arc-browser-mcp] ${level} ${message}${suffix}\n`);
 }
 
 export const log = {

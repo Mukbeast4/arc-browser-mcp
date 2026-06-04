@@ -10,7 +10,7 @@ export function registerEngineTools(server: McpServer, ctx: ServerContext): void
     "arc_cdp_start",
     {
       description:
-        "Switch to the CDP engine: high-fidelity automation on a dedicated Arc profile (native screenshots, network, console, auto-wait). Arc is single-instance, so your normal Arc must be closed. Pass confirmQuitDaily=true to let arc-mcp gracefully quit it (it is relaunched on arc_cdp_stop).",
+        "Switch to the CDP engine: high-fidelity automation on a dedicated Arc profile (native screenshots, network, console, auto-wait). Arc is single-instance, so your normal Arc must be closed. Pass confirmQuitDaily=true to let arc-browser-mcp gracefully quit it (it is relaunched on arc_cdp_stop).",
       inputSchema: {
         confirmQuitDaily: z
           .boolean()

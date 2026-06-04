@@ -259,7 +259,7 @@ These tools act on the active tab of the active engine (live or CDP).
 
 ### `arc_cdp_start`
 
-**Description:** Switch to the CDP engine on a dedicated Arc profile (native screenshots, auto-wait). Arc is single-instance, so your normal Arc must be closed; pass `confirmQuitDaily` to let arc-mcp quit it (relaunched on `arc_cdp_stop`).
+**Description:** Switch to the CDP engine on a dedicated Arc profile (native screenshots, auto-wait). Arc is single-instance, so your normal Arc must be closed; pass `confirmQuitDaily` to let arc-browser-mcp quit it (relaunched on `arc_cdp_stop`).
 
 **Parameters:**
 
