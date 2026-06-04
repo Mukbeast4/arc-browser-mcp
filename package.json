@@ -1,7 +1,28 @@
 {
   "name": "arc-browser-mcp",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "MCP server to drive the Arc browser on macOS via a live AppleScript engine and a CDP engine.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "arc",
+    "arc-browser",
+    "browser-automation",
+    "applescript",
+    "cdp",
+    "chrome-devtools-protocol",
+    "playwright",
+    "macos",
+    "ai-agent"
+  ],
+  "homepage": "https://github.com/Mukbeast4/arc-browser-mcp#readme",
+  "bugs": "https://github.com/Mukbeast4/arc-browser-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mukbeast4/arc-browser-mcp.git"
+  },
+  "license": "MIT",
+  "author": "Mukbeast4",
   "type": "module",
   "bin": { "arc-browser-mcp": "./dist/index.js" },
   "main": "./dist/index.js",
